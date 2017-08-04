@@ -104,7 +104,7 @@ class MicroUnits:
         return
     
     def buildGameMap():
-        game_map = np.zeros((256,256,11))
+        game_map = np.zeros((256,256,16))
         for x in range(256):
             for y in range(256):
                 game_map[x,y,0] = self.Broodwar.getGroundHeight(x=int(x/2), y=int(y/2))
@@ -114,25 +114,31 @@ class MicroUnits:
             if unit.exists() != True:
                 continue
             info = getUnitInfo(unit)
-            top = int(round(unit.getTop()/16))
-            bottom = int(round(unit.getBottom()/16))
-            right = int(round(unit.getRight()/16))
-            left = int(round(unit.getLeft()/16))
+            top, bottom, right, left = getUnitPosition(unit)
             for i in range(left, right+1):
                 for j in range(top, bottom+1):
                     game_map[i,j,1:] = info
         return game_map
 
-    def getUnitInfo(unit):
+    def getUnitPosition(unit):
+        top = int(round(unit.getTop()/16))
+        bottom = int(round(unit.getBottom()/16))
+        right = int(round(unit.getRight()/16))
+        left = int(round(unit.getLeft()/16))
+        return top, bottom, right, left
+        
+    def getUnitInfo(unit, pos=False):
         data = []
         data.append(unit.getHitPoints())
         data.append(unit.getShields())
+        data.append(unit.sightRange())
+        if unit.isFlyer():
+            data.append(1)
+        else:
+            data.append(0)
         unitType = unit.getType()
-        weapon = unitType.groundWeapon()
-        data.append(weapon.damageAmount())
-        data.append(weapon.damageBonus())
-        data.append(weapon.maxRange())
-        data.append(weapon.medianSplashRadius())
+        data.extend(getWeaponInfo(unitType.groundWeapon()))
+        data.extend(getWeaponInfo(unitType.airWeapon()))
         sizeType = str(unitType.size())
         if sizeType == 'Small':
             data.extend([1,0,0])
@@ -142,5 +148,15 @@ class MicroUnits:
             data.extend([0,0,1])
         else:
             data.extend([0,0,0])
-        data.append(weapon.damageFactor())
+        if pos:
+            data.extend(getUnitPosition(unit))
         return np.asarray(data, dtype=np.float32)
+
+    def getWeaponInfo(weapon):
+        data = []
+        data.append(weapon.damageAmount())
+        data.append(weapon.damageBonus())
+        data.append(weapon.maxRange())
+        data.append(weapon.medianSplashRadius())
+        data.append(weapon.damageFactor())
+        return data
