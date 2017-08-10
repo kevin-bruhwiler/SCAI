@@ -12,52 +12,41 @@ import random
 #buildings (163392, 800, 8)
 #labels (163392, 1)
 # * .2 = 32678
-
-def genValData(frames, units, buildings, labels, its):
-    for i in range(int(163392*2) * its):
-        ix = -1
-        while not ix % 32678 == 0:
-            ix = random.randrange(len(labels))
-        x = []
-        y = np.zeros((1,180))
-        unit = units[ix]
-        for row in unit:
-            x.append(row.reshape((1,6)))
-        building = buildings[ix]
-        for row in building:
-            x.append(row.reshape((1,8)))
-        x.append(frames[ix].reshape((1,1)))
-        y[0][int(labels[ix][0])] = 1
-        yield (x, y)
-    return
     
-def genData(frames, units, buildings, labels, its):
-    for i in range(int(163392*.8) * its):
-        ix = -1
-        while ix % 32678 == 0:
-            ix = random.randrange(len(labels))
+def genData(frames, units, buildings, labels, its, bs):
+    all_ixs = [i for i in range(len(labels))]
+    random.shuffle(all_ixs)
+    for i in range(0,int(163392) * its,bs):
+        ixs = all_ixs[i:i+bs]
         x = []
-        y = np.zeros((1,180))
-        unit = units[ix]
-        for row in unit:
-            x.append(row.reshape((1,6)))
-        building = buildings[ix]
-        for row in building:
-            x.append(row.reshape((1,8)))
-        x.append(frames[ix].reshape((1,1)))
-        y[0][int(labels[ix][0])] = 1
+        y = np.zeros((bs,180))
+        for r in range(1600):
+            arr = np.zeros((bs,6))
+            for k, ix in enumerate(ixs):
+                arr[k] = units[ix][r].reshape((1,6))
+            x.append(arr)
+        for r in range(800):
+            arr = np.zeros((bs,8))
+            for k, ix in enumerate(ixs):
+                arr[k] = buildings[ix][r].reshape((1,8))
+            x.append(arr)
+        arr = np.zeros((bs,1))
+        for k, ix in enumerate(ixs):
+            arr[k] = frames[ix].reshape((1,1))
+        x.append(arr)
+        for k, ix in enumerate(ixs):
+            y[k][int(labels[ix][0])] = 1
         yield (x, y)
     return
 
-def run(path, model, its):
+def run(path, model, its, bs):
     frames = np.load(path+'frame.npy', 'r')
     units = np.load(path+'unit_features.npy', 'r')
     buildings = np.load(path+'building_features.npy', 'r')
     labels = np.load(path+'labels.npy', 'r')
 
-    model.fit_generator(genData(frames, units, buildings, labels, its), int(163392),
-                        epochs=its, verbose=1, validation_data=genData(frames, units, buildings, labels, its),
-                        validation_steps=100, use_multiprocessing=False)
+    model.fit_generator(genData(frames, units, buildings, labels, its, bs),
+                        int(163392/bs), epochs=its, verbose=1)
     return
     
 def makeModel():
@@ -102,7 +91,8 @@ def testModel():
 
 if __name__=='__main__':
     its = 1
+    batch_size = 128
     path = 'C:\\Users\\kbruhwiler\\Downloads\\clean_data\\'
     model = makeModel()
     #model = testModel()
-    run(path, model, its)
+    run(path, model, its, batch_size)
