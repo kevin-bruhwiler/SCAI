@@ -1,7 +1,8 @@
 import numpy as np
 np.set_printoptions(threshold=np.inf)
 import keras
-from keras.layers import Dense, Input, concatenate
+from keras.layers import Dense, Input, concatenate, Flatten
+from keras.layers.wrappers import TimeDistributed
 from keras.models import Model
 import random
 
@@ -20,19 +21,18 @@ def genData(frames, units, buildings, labels, its, bs):
         ixs = all_ixs[i:i+bs]
         x = []
         y = np.zeros((bs,180))
-        for r in range(1600):
-            arr = np.zeros((bs,6))
-            for k, ix in enumerate(ixs):
-                arr[k] = units[ix][r].reshape((1,6))
-            x.append(arr)
-        for r in range(800):
-            arr = np.zeros((bs,8))
-            for k, ix in enumerate(ixs):
-                arr[k] = buildings[ix][r].reshape((1,8))
-            x.append(arr)
+        arr = np.zeros((bs,1600,6))
+        for k, ix in enumerate(ixs):
+            arr[k] = units[ix]
+        x.append(arr)
+
+        arr = np.zeros((bs,800,8))
+        for k, ix in enumerate(ixs):
+            arr[k] = buildings[ix]
+        x.append(arr)
         arr = np.zeros((bs,1))
         for k, ix in enumerate(ixs):
-            arr[k] = frames[ix].reshape((1,1))
+            arr[k] = frames[ix]
         x.append(arr)
         for k, ix in enumerate(ixs):
             y[k][int(labels[ix][0])] = 1
@@ -47,35 +47,36 @@ def run(path, model, its, bs):
 
     model.fit_generator(genData(frames, units, buildings, labels, its, bs),
                         int(163392/bs), epochs=its, verbose=1)
+
+    for d in genData(frames, units, buildings, labels, its, bs):
+        out = model.predict(d[0], batch_size=bs, verbose=0)
+        for pred in out:
+            print(np.where(pred == 1)+' : '+np.where(d[1] == 1))
+        break
+    
     return
     
 def makeModel():
-    unit_inputs = []
-    building_inputs = []
     inputs = []
 
-    for i in range(1600):
-        model = Input(shape=(6,))
-        inputs.append(model)
-        model = Dense(6, activation='relu')(model)
-        unit_inputs.append(model)
+    model = Input(shape=(1600,6))
+    inputs.append(model)
+    u_model = TimeDistributed(Dense(6, activation='relu'))(model)
+    u_model = Flatten()(model)
 
-    for i in range(800):
-        model = Input(shape=(8,))
-        inputs.append(model)
-        model = Dense(8, activation='relu')(model)
-        building_inputs.append(model)
+    model = Input(shape=(800,8))
+    inputs.append(model)
+    b_model = TimeDistributed(Dense(8, activation='relu'))(model)
+    b_model = Flatten()(model)
 
-    unit_model = concatenate(unit_inputs)
-    building_model = concatenate(building_inputs)
     frame_input = Input(shape=(1,))
     inputs.append(frame_input)
+    
+    f_model = Dense(1, activation='relu')(frame_input)
+    u_model = Dense(2000, activation='relu')(u_model)
+    b_model = Dense(1500, activation='relu')(b_model)
 
-    frame_model = Dense(1, activation='relu')(frame_input)
-    unit_model = Dense(2000, activation='relu')(unit_model)
-    building_model = Dense(1500, activation='relu')(building_model)
-
-    model = concatenate([unit_model, building_model, frame_model])
+    model = concatenate([u_model, b_model, f_model])
     model = Dense(3500, activation='relu')(model)
     out = Dense(180, activation='softmax')(model)
     model = Model(inputs=inputs, outputs=out)
@@ -91,7 +92,7 @@ def testModel():
 
 if __name__=='__main__':
     its = 1
-    batch_size = 128
+    batch_size = 256
     path = 'C:\\Users\\kbruhwiler\\Downloads\\clean_data\\'
     model = makeModel()
     #model = testModel()
